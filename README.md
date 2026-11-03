@@ -34,16 +34,19 @@ We evaluate 35 models and examine their internal representations to understand h
 
 ImageNet-OOC1k is derived from [ImageNet](https://image-net.org) validation images and [ImageNet-S](https://github.com/LUSSeg/ImageNet-S) segmentation masks.
 
-| Component | Description |
-|---|---|
-| Backgrounds | 1,137 inpainted scenes, comprising 558 nature, 533 human-related, and 46 miscellaneous backgrounds |
-| Object library | 12,321 segmented objects spanning 918 ImageNet classes |
-| Possible pairings | Approximately 14 million object-instance–background combinations |
-| Evaluated composites | 953,862 images generated using 260 backgrounds and the available object-class pool |
-| Mechanistic subset | 75,000 composites for patch-level analyses of five Vision Transformers |
-| Controls | Original images, backgrounds alone, and objects alone on black, white, and `1/f` noise backgrounds |
+| Component | Count | Description |
+|---|--:|---|
+| **Backgrounds** | **1,137** | ImageNet validation scenes with the object removed by inpainting |
+| &emsp;Nature | 558 | 12 subcategories, e.g. field, tree, sea, river, sky, snow |
+| &emsp;Human-related | 533 | 13 subcategories, e.g. road, table, wall, yard, inside a house |
+| &emsp;Misc | 46 | Scenes that fit neither category |
+| **Object library** | **12,321** | Object cut-outs with their ImageNet-S segmentation masks |
+| &emsp;Object classes | 918 | ImageNet classes, 915 of them with at least four instances |
+| **Composites** | **953,862** | Library objects placed on backgrounds along the semantic axis, used in the behavioural experiments |
+| &emsp;Backgrounds used | 260 | 10 per subcategory (Misc counts as one), each combined with all object classes |
+| &emsp;Possible pairings | ~14.0 M | All backgrounds × all objects, if you want to generate more |
+| **Mechanistic subset** | **75,000** | Composites for the patch-level analysis of five Vision Transformers: 20 rank bins × 3 background categories × 1,250 |
 
-The dataset decouples object identity from background context. Composite specifications record the object, background, placement, scale, and other generation parameters.
 
 We distribute metadata and reconstruction files rather than complete ImageNet-derived images. To recreate the dataset, you need the ImageNet validation images and ImageNet-S annotations. The steps below reconstruct the source images, after which the notebooks generate the composites and controls.
 
@@ -72,9 +75,7 @@ You need three archives:
 |---|---|---|---|
 | `ImageNet-OOC1k_source.zip` — our metadata and background patches | 197 MB | **[LINK TBA]** | [Our paper](#citation) |
 | `ILSVRC2012_img_val.tar` — ImageNet validation images | 6.3 GB | [ImageNet downloads](https://image-net.org/download-images) | [Russakovsky et al., IJCV 2015](https://arxiv.org/abs/1409.0575) |
-| `ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip` — ImageNet-S annotations | 61 MB | [Download ZIP](https://github.com/LUSSeg/ImageNet-S/releases/download/ImageNet-S/ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip) | [Gao et al., TPAMI 2022](https://arxiv.org/abs/2106.03149) |
-
-Use the **original ImageNet validation images**, rather than the face-blurred version, so that reconstruction checksums match. ImageNet access requires an account.
+| `ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip` — ImageNet-S annotations | 61 MB | [Download ZIP](https://github.com/LUSSeg/ImageNet-S/releases/download/ImageNet-S/ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip) | [Gao et al., TPAMI 2022](https://arxiv.org/abs/2106.03149) · [GitHub](https://github.com/LUSSeg/ImageNet-S) |
 
 For ImageNet-S, you only need the annotation ZIP listed above. You do not need to install its toolbox or run its preparation scripts.
 
