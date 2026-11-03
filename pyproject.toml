@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ooc1k"
+version = "0.1.0"
+description = "Code for 'How Far Is Too Far? Object Recognition Declines Monotonically with Semantic Distance' (ImageNet-OOC1k)"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+include = ["ooc1k*"]

@@ -1,0 +1,16 @@
+# Generated and downloaded artifacts
+outputs/**
+!outputs/*/
+!outputs/**/.gitkeep
+
+# Python / Jupyter
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# ImageNet-OOC1k images (source data and generated composites)
+ImageNet-OOC1k/
