@@ -43,9 +43,12 @@ def plot_adjusted_curve(marginal_curve, adjusted_curve):
     """
     with mpl.rc_context(STYLE):
         fig, ax = plt.subplots(figsize=(4.8, 3.6), layout="constrained")
+        # Both curves start relative to their first bin; zero marks no change from that baseline.
         ax.axhline(0, color="#CCCCCC", linewidth=0.8, zorder=1)
+        # Compare the observed decline with the decline after accounting for generation controls.
         ax.plot(marginal_curve.index, marginal_curve.values, color=MARGINAL_COLOR, linewidth=1.8, label="No controls", zorder=2)
         ax.plot(adjusted_curve.index, adjusted_curve.values, color=ADJUSTED_COLOR, linewidth=2.2, label="Same background and object", zorder=3)
+        # Keep ranks on the x-axis and accuracy changes in percentage points on the y-axis.
         ax.set_xticks(np.arange(0, 1001, 200))
         ax.set_xlim(-10, 1010)
         ax.set_xlabel("Semantic dissimilarity rank")

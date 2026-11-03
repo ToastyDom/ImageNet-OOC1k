@@ -24,7 +24,7 @@ from ooc1k.dataset_generation.composites import (
     get_background_path,
 )
 
-# The 18 generation variables, grouped by the concern they address.
+# Generation properties we check for changes along the semantic axis.
 VARIABLE_GROUPS = {
     "placement": ["center_x", "center_y", "eccentricity", "border_distance", "rotated"],
     "scale": [
@@ -43,7 +43,7 @@ VARIABLE_GROUPS = {
     "cutout": ["cutout_complexity", "mask_fill"],
 }
 
-# Covariates of the regressions: placement, realized scale and shape, and which size limits were hit.
+# Placement, size and shape variables included as regression controls.
 COVARIATES = [
     "center_x",
     "center_y",
@@ -58,7 +58,7 @@ COVARIATES = [
     "both_clamps",
 ]
 
-# Boundary bands: pixels within BAND_INSIDE of the edge inside the object, within BAND_OUTSIDE outside of it.
+# Width of the measurement bands just inside and outside the object edge, in pixels.
 BAND_INSIDE = 4
 BAND_OUTSIDE = 7
 BOUNDARY_MEASURES = ["luminance", "color", "gradient"]
@@ -68,10 +68,11 @@ BOUNDARY_MEASURES = ["luminance", "color", "gradient"]
 
 
 def get_cutout_geometry(source_dir, object_names):
-    """Size, mask fill ratio and outline complexity of every object cutout, as `create_cutout` makes them."""
+    """Measure each cutout's size, mask coverage and outline complexity."""
     library = Path(source_dir) / "object_library"
     rows = {}
     for name in tqdm(object_names, desc="Cutouts"):
+        # Match the mask to the source image, just as we do when creating the cutout.
         with Image.open(library / "images" / name) as image:
             size = image.size
         with Image.open(library / "masks" / f"{Path(name).stem}.png") as mask:
@@ -83,6 +84,7 @@ def get_cutout_geometry(source_dir, object_names):
         # Crop to the bounding box of the mask, as the cutout is cropped.
         ys, xs = np.nonzero(alpha)
         crop = alpha[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+        # Count visible pixels and the inner outline. Scaling by sqrt(area) accounts for object size.
         area = crop.sum()
         perimeter = area - ndimage.binary_erosion(crop).sum()
         rows[name] = {
@@ -105,6 +107,7 @@ def get_background_sizes(source_dir, backgrounds):
 
 def replay_random_draws(image_seed, scale_min, scale_max):
     """Replay the first draws of `create_composite`: the scale factor and whether the object was rotated."""
+    # Use the same draw order as generation: scale, brightness, colour, then the rotation decision.
     rng = random.Random(image_seed)
     scale_factor = rng.uniform(scale_min, scale_max)
     rng.uniform(*BRIGHTNESS_RANGE)
@@ -134,6 +137,7 @@ def get_generation_variables(metadata, cutouts, background_sizes, config):
         replayed object size equals the recorded one (only checked for objects that were not rotated, since rotation
         enlarges the recorded bounding box).
     """
+    # Match cutout and background measurements to the composite row order.
     cutout = cutouts.loc[metadata["object_image_name"]].reset_index(drop=True)
     background = background_sizes.loc[metadata["background_id"]].reset_index(drop=True)
     bg_w, bg_h = background["background_width"].values, background["background_height"].values
@@ -150,6 +154,7 @@ def get_generation_variables(metadata, cutouts, background_sizes, config):
     wide = aspect > 1
     scaled_w = np.where(wide, np.floor(bg_w * scale_factor), np.floor(np.floor(bg_h * scale_factor) * aspect))
     scaled_h = np.where(wide, np.floor(np.floor(bg_w * scale_factor) / aspect), np.floor(bg_h * scale_factor))
+    # Record which size limits were reached before applying them in the original order.
     min_object_dim = config["min_object_dim"]
     min_clamp = (scaled_w < min_object_dim) | (scaled_h < min_object_dim)
     max_clamp_width = np.maximum(scaled_w, min_object_dim) > bg_w // 2
@@ -180,6 +185,7 @@ def get_generation_variables(metadata, cutouts, background_sizes, config):
         "cutout_complexity": cutout["cutout_complexity"].values,
         "mask_fill": cutout["mask_fill"].values,
     })
+    # Rotation can enlarge the bounding box, so compare replayed sizes only for unrotated objects.
     variables["size_matches"] = np.where(rotated, np.nan, (final_w == w) & (final_h == h))
     return variables
 
@@ -207,6 +213,7 @@ def get_variable_drift(variables, ranks, accuracy, bin_width=25):
         observed change). The contribution is the variable's change times its univariate effect on accuracy, which
         also credits the variable with everything it correlates with, so it is generous.
     """
+    # Compare the two ends of the axis using the same rank bins as the accuracy curves.
     bins = (np.asarray(ranks) - 1) // bin_width
     first, last = bins == bins.min(), bins == bins.max()
     observed = 100 * (accuracy[last].mean() - accuracy[first].mean())
@@ -216,6 +223,7 @@ def get_variable_drift(variables, ranks, accuracy, bin_width=25):
         for name in names:
             values = variables[name].values
             change = values[last].mean() - values[first].mean()
+            # Estimate each variable separately; correlated variables can explain the same change.
             contribution = 100 * np.polyfit(values, accuracy, 1)[0] * change
             rows[name] = {
                 "group": group,
@@ -234,16 +242,19 @@ def get_variable_drift(variables, ranks, accuracy, bin_width=25):
 
 
 def absorb_fixed_effects(Z, groups, tol=1e-8, max_iterations=1000):
-    """Remove group means from every column of Z, alternating between the groupings until nothing changes."""
+    """Remove group means from Z, repeating across groupings until the changes are small."""
+    # Work on a copy so the caller's data stays intact.
     Z = np.array(Z, dtype=np.float64)
     for _ in range(max_iterations):
         largest_change = 0.0
+        # Removing one set of means can shift another, so repeat when there are several groupings.
         for codes, n_groups in groups:
             counts = np.bincount(codes, minlength=n_groups)
             for j in range(Z.shape[1]):
                 means = np.bincount(codes, weights=Z[:, j], minlength=n_groups) / counts
                 Z[:, j] -= means[codes]
                 largest_change = max(largest_change, np.abs(means).max())
+        # One grouping needs only one pass; several stop at the tolerance or iteration limit.
         if largest_change < tol or len(groups) == 1:
             break
     return Z
@@ -251,12 +262,14 @@ def absorb_fixed_effects(Z, groups, tol=1e-8, max_iterations=1000):
 
 def fit_clustered_ols(X, y, clusters, n_absorbed):
     """Least squares with standard errors clustered two ways (by background and by object instance)."""
+    # Fit the coefficients and collect each image's contribution to their uncertainty.
     XtX_inv = np.linalg.pinv(X.T @ X)
     beta = XtX_inv @ (X.T @ y)
     scores = X * (y - X @ beta)[:, None]
     dof = (len(y) - 1) / (len(y) - X.shape[1] - n_absorbed)
 
-    # Cameron-Gelbach-Miller: both one-way variances minus that of their intersection (one composite per pair).
+    # Combine uncertainty within backgrounds and within object instances.
+    # Subtract the overlap once: each background-object pair is one composite (Cameron-Gelbach-Miller).
     meat = -scores.T @ scores * dof
     for codes, n_groups in clusters:
         sums = np.stack([np.bincount(codes, weights=scores[:, j], minlength=n_groups) for j in range(X.shape[1])], axis=1)
@@ -295,11 +308,13 @@ def fit_rank_slopes(ranks, correct, clusters, covariates=None, fixed_effects=(),
     slopes : pandas.DataFrame
         One row per model with the rank slope in percentage points per 100 ranks and its 95% confidence interval.
     """
+    # Encode the background and object groups for the grouped sums below.
     clusters = [get_group_codes(values) for values in clusters]
     groups = [get_group_codes(values) for values in fixed_effects]
     n_absorbed = sum(n for _, n in groups) - max(len(groups) - 1, 0)
 
-    # Shared columns, outcomes and model-specific columns are demeaned together, once.
+    # Express rank in steps of 100 and remove group means from predictors and outcomes together.
+    # Without fixed effects, add an ordinary intercept instead.
     shared = np.column_stack([np.asarray(ranks, dtype=float) / 100] + ([covariates.values] if covariates is not None else []))
     blocks = [shared, correct.values.astype(float)] + ([model_covariates[correct.columns].values] if model_covariates is not None else [])
     Z = np.column_stack(blocks)
@@ -307,6 +322,7 @@ def fit_rank_slopes(ranks, correct, clusters, covariates=None, fixed_effects=(),
     n_shared, n_models = shared.shape[1], correct.shape[1]
 
     rows = {}
+    # Fit each model with the shared controls and, if provided, its own extra control.
     for i, model in enumerate(correct.columns):
         columns = [Z[:, :n_shared]]
         if model_covariates is not None:
@@ -314,6 +330,7 @@ def fit_rank_slopes(ranks, correct, clusters, covariates=None, fixed_effects=(),
         if not groups:
             columns.append(Z[:, -1:])
         beta, se = fit_clustered_ols(np.column_stack(columns), Z[:, n_shared + i], clusters, n_absorbed)
+        # Convert the slope and its 95% confidence interval to percentage points per 100 ranks.
         rows[model] = {"slope": 100 * beta[0], "ci_low": 100 * (beta[0] - 1.96 * se[0]), "ci_high": 100 * (beta[0] + 1.96 * se[0])}
     return pd.DataFrame.from_dict(rows, orient="index")
 
@@ -346,17 +363,20 @@ def fit_binned_curve(ranks, correct, covariates, fixed_effects, bin_width=25):
     n_bins = bins.max() + 1
     indicators = (bins[:, None] == np.arange(1, n_bins)[None, :]).astype(float)
 
+    # Remove background and object group means before fitting all model outcomes at once.
     groups = [get_group_codes(values) for values in fixed_effects]
     Z = absorb_fixed_effects(np.column_stack([indicators, covariates.values, correct.values.astype(float)]), groups)
     X = Z[:, :indicators.shape[1] + covariates.shape[1]]
     beta = np.linalg.lstsq(X, Z[:, X.shape[1]:], rcond=None)[0][:n_bins - 1]
 
+    # Put the reference bin back as zero and report each bin's change in percentage points.
     centers = 1 + np.arange(n_bins) * bin_width + bin_width / 2
     return pd.DataFrame(100 * np.vstack([np.zeros(correct.shape[1]), beta]), index=pd.Index(centers, name="bin_center"), columns=correct.columns)
 
 
 def get_object_only_accuracy(predictions_dir, models, object_image_names, backgrounds=("black", "white", "pink_noise")):
     """Every model's accuracy on the object-only image of each composite's object, averaged over the neutral backgrounds."""
+    # Prediction IDs omit the image extension; keep the requested composite order when matching them.
     stems = pd.Series(object_image_names).str.replace(".JPEG", "", regex=False)
     accuracy = {}
     for model in models:
@@ -364,6 +384,7 @@ def get_object_only_accuracy(predictions_dir, models, object_image_names, backgr
         for background in backgrounds:
             predictions = pd.read_csv(find_prediction_csv(predictions_dir, model, f"object_library_{background}"), usecols=["image_id", "true_class_idx", "pred_class_idx"])
             per_background.append((predictions["pred_class_idx"] == predictions["true_class_idx"]).groupby(predictions["image_id"]).mean())
+        # Average across neutral backgrounds, then repeat each object's score for its composites.
         accuracy[model] = pd.concat(per_background, axis=1).mean(axis=1).reindex(stems).values
     return pd.DataFrame(accuracy)
 
@@ -372,7 +393,7 @@ def get_object_only_accuracy(predictions_dir, models, object_image_names, backgr
 
 
 def sample_composites(metadata, n_objects, n_per_object, seed=42):
-    """Draw object instances, then a few of their composites, so that object-instance fixed effects stay estimable."""
+    """Sample several composites per object so we can estimate object-instance fixed effects."""
     rng = np.random.default_rng(seed)
     objects = rng.choice(metadata["object_image_name"].unique(), size=n_objects, replace=False)
     candidates = metadata[metadata["object_image_name"].isin(objects)]
@@ -381,10 +402,12 @@ def sample_composites(metadata, n_objects, n_per_object, seed=42):
 
 def get_boundary_bands(alpha):
     """Pixels just inside and just outside the object edge, and the soft edge itself, from the pasted alpha."""
+    # Separate solid object pixels, empty background pixels and the partly transparent edge.
     solid = alpha >= 0.96
     empty = alpha <= 0.04
     if solid.sum() < 20 or empty.sum() < 20:
         return None
+    # Keep pixels close to the boundary on each side.
     inside = solid & (ndimage.distance_transform_edt(solid) <= BAND_INSIDE)
     outside = empty & (ndimage.distance_transform_edt(empty) <= BAND_OUTSIDE)
     return inside, outside, ~(solid | empty)
@@ -392,8 +415,10 @@ def get_boundary_bands(alpha):
 
 def get_boundary_contrast(rgb, inside, outside, edge):
     """Luminance, color and gradient discontinuity across an object boundary."""
+    # Compare average colour on both sides in Lab space, where the first channel is lightness.
     lab = rgb2lab(rgb)
     lab_inside, lab_outside = lab[inside].mean(axis=0), lab[outside].mean(axis=0)
+    # Measure local lightness changes across both bands and the soft edge.
     gradient_y, gradient_x = np.gradient(lab[..., 0])
     return {
         "luminance": abs(lab_inside[0] - lab_outside[0]),
@@ -411,6 +436,7 @@ def load_cutout(source_dir, object_image_name):
 
 def measure_background(args):
     """Rebuild the sampled composites of one background and measure their boundaries, with the object and without it."""
+    # Load this background once and reuse it for all of its sampled composites.
     rows, source_dir, config, padding = args
     first = rows.iloc[0]
     background_row = {"image_id": first["background_id"], "background_category": first["background_category"], "background_subcategory": first["background_subcategory"]}
@@ -419,6 +445,7 @@ def measure_background(args):
 
     measures = {}
     for index, row in rows.iterrows():
+        # Rebuild the object with its original seed and generation settings.
         cutout = load_cutout(str(source_dir), row["object_image_name"])
         composite, _, obj, placement = create_composite(background, cutout, row["image_seed"], config["scale_min"], config["scale_max"], config["margin"], config["min_object_dim"])
 
@@ -435,6 +462,7 @@ def measure_background(args):
         # The same bands on the background alone tell us how much contrast the background has there anyway.
         real = get_boundary_contrast(np.asarray(composite, dtype=np.float32)[y0:y1, x0:x1] / 255, *bands)
         sham = get_boundary_contrast(background_rgb[y0:y1, x0:x1], *bands)
+        # Subtract the background-only measurement and check that the replayed placement matches.
         measures[index] = {
             **{f"{name}_excess": real[name] - sham[name] for name in BOUNDARY_MEASURES},
             "replay_matches": (x, y, *obj.size) == (row["placement_x"], row["placement_y"], row["object_width"], row["object_height"]),
@@ -466,9 +494,11 @@ def get_boundary_measures(sample, source_dir, config, padding=8, num_workers=16)
         discontinuity (composite minus background alone, in the same bands) and whether the replayed placement
         matches the metadata.
     """
+    # Give each worker one background at a time, avoiding repeated background loads.
     jobs = [(rows, Path(source_dir), config, padding) for _, rows in sample.groupby("background_id")]
     measures = {}
     with Pool(num_workers) as pool:
         for result in tqdm(pool.imap_unordered(measure_background, jobs), total=len(jobs), desc="Backgrounds"):
             measures.update(result)
+    # Workers finish out of order; restore the metadata index order before returning.
     return pd.DataFrame.from_dict(measures, orient="index").sort_index()

@@ -34,16 +34,20 @@ def get_axis_curves(ranks, correct, bin_width=25):
     curves : pandas.DataFrame
         One row per bin (indexed by its center rank) and one column per model.
     """
+    # Group ranks starting at 1, then count how many composites fall in each bin.
     bins = (np.asarray(ranks) - 1) // bin_width
     counts = np.bincount(bins)
+    # Divide the number of correct predictions by the number of images in each bin.
     curves = {model: np.bincount(bins, weights=correct[model].values) / counts for model in correct.columns}
     return pd.DataFrame(curves, index=pd.Index(1 + np.arange(len(counts)) * bin_width + bin_width / 2, name="bin_center"))
 
 
 def get_hop_curves(hops, correct, min_composites=1000):
     """Top-1 accuracy of every model per WordNet hop count, leaving out self-pairs and rare hop counts."""
+    # Self-pairs have no hop count, so we leave them out before grouping the predictions.
     known = ~np.isnan(hops)
     curves = correct[known].groupby(hops[known].astype(int)).mean()
+    # Keep only hop counts with enough composites for a useful accuracy estimate.
     counts = pd.Series(hops[known].astype(int)).value_counts()
     return curves[counts.reindex(curves.index) >= min_composites].rename_axis("hop")
 
@@ -67,17 +71,20 @@ def get_curve_summary(curve):
 
 def get_axis_agreement(D_a, D_b):
     """Spearman correlation between two dissimilarity matrices, over all class pairs."""
+    # Each class pair appears twice in a symmetric matrix; use it only once and skip the diagonal.
     upper = np.triu_indices(len(D_a), k=1)
     return spearmanr(D_a[upper], D_b[upper])[0]
 
 
 def permutation_test(values_a, values_b, n_permutations=20000, seed=42):
     """Two-sided permutation test on the difference between the means of two groups."""
+    # Start with the observed difference, then pool the values to shuffle group membership.
     values_a, values_b = np.asarray(values_a), np.asarray(values_b)
     observed = values_a.mean() - values_b.mean()
     pooled = np.concatenate([values_a, values_b])
     rng = np.random.default_rng(seed)
 
+    # Keep the original group sizes in each shuffle. Count differences at least as large in either direction.
     differences = np.empty(n_permutations)
     for i in range(n_permutations):
         shuffled = rng.permutation(pooled)
@@ -90,23 +97,28 @@ def permutation_test(values_a, values_b, n_permutations=20000, seed=42):
 
 def get_cosine_dissimilarity(rows):
     """Cosine dissimilarity between the rows of a (classes x dimensions) matrix, symmetric with zero diagonal (Eq. 1)."""
+    # Normalise each class vector so its dot product with another vector gives cosine similarity.
     rows = torch.nn.functional.normalize(torch.as_tensor(rows, dtype=torch.float64), dim=1)
     D = (1 - rows @ rows.T).numpy()
+    # Remove small asymmetries from rounding and set each class's distance to itself to zero.
     D = (D + D.T) / 2
     np.fill_diagonal(D, 0.0)
     return D
 
 
 def build_consensus(matrices):
-    """Z-score the off-diagonal of every matrix, average, symmetrise and min-max rescale to [0, 1] (Eq. 2, as in notebook 01)."""
+    """Combine dissimilarity matrices into a consensus axis, as in Eq. 2."""
+    # Leave self-distances out when matching the scales of the different axes.
     mask = ~np.eye(matrices[0].shape[0], dtype=bool)
 
+    # Give each axis the same off-diagonal mean and standard deviation before averaging.
     z_matrices = []
     for D in matrices:
         Z = D.copy()
         Z[mask] = (D[mask] - D[mask].mean()) / D[mask].std()
         z_matrices.append(Z)
 
+    # Average the axes, make the result symmetric, and rescale class-pair distances to [0, 1].
     consensus = np.mean(np.stack(z_matrices), axis=0)
     consensus = (consensus + consensus.T) / 2
     consensus[mask] = (consensus[mask] - consensus[mask].min()) / (consensus[mask].max() - consensus[mask].min())
@@ -140,17 +152,19 @@ def fit_linear_probe(features, class_idx, is_train, epochs=20, lr=1e-3, weight_d
     accuracy : float
         Top-1 accuracy on the held-out images.
     """
+    # Split the frozen features into training and held-out images. Only the probe is trained.
     torch.manual_seed(seed)
     X_train = torch.as_tensor(features[is_train], dtype=torch.float32)
     y_train = torch.as_tensor(class_idx[is_train], dtype=torch.long)
     X_test = torch.as_tensor(features[~is_train], dtype=torch.float32, device=device)
     y_test = torch.as_tensor(class_idx[~is_train], dtype=torch.long, device=device)
 
+    # Use one output per ImageNet class and reduce the learning rate over the training run.
     probe = torch.nn.Linear(X_train.shape[1], 1000).to(device)
     optimizer = torch.optim.AdamW(probe.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
-    # Plain minibatch training on the frozen features.
+    # Shuffle the training images each epoch and update the linear classifier one batch at a time.
     for _ in range(epochs):
         order = torch.randperm(len(X_train))
         for start in range(0, len(X_train), batch_size):
@@ -161,6 +175,7 @@ def fit_linear_probe(features, class_idx, is_train, epochs=20, lr=1e-3, weight_d
             optimizer.step()
         scheduler.step()
 
+    # Measure held-out accuracy and return the class weights used to build the probe axis.
     with torch.no_grad():
         accuracy = (probe(X_test).argmax(dim=1) == y_test).float().mean().item()
     return probe.weight.detach().cpu().numpy(), accuracy
@@ -195,12 +210,14 @@ def get_retrieval_axis(features, class_idx, top_k=1, block=25, device="cuda"):
     n_per_class = np.bincount(class_idx)[0]
     X = torch.nn.functional.normalize(torch.as_tensor(features[order], dtype=torch.float32, device=device), dim=1)
 
-    # Similarities of every image in a block of classes to every image in every class.
+    # Compare a few source classes at a time to avoid storing all image-pair similarities at once.
     D = np.zeros((1000, 1000))
     for start in range(0, 1000, block):
         stop = min(start + block, 1000)
         S = (X[start * n_per_class:stop * n_per_class] @ X.T).view(stop - start, n_per_class, 1000, n_per_class)
+        # For each source image, average its best matches within each target class.
         best = S.topk(top_k, dim=3).values.mean(dim=3)
+        # Average over source images and turn similarity into dissimilarity.
         D[start:stop] = 1 - best.mean(dim=1).double().cpu().numpy()
 
     D = (D + D.T) / 2

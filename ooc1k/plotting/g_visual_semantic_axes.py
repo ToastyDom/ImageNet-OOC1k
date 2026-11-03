@@ -44,9 +44,11 @@ STYLE = {
 
 def draw_axis_curves(ax, curves, reference, title, legend_loc="lower left"):
     """Draw the mean accuracy curve of every axis, with the original consensus as a dashed reference."""
+    # Draw the original axis first so the alternative axes remain visible on top.
     ax.plot(reference.index, reference.values, label="Original consensus", zorder=2, **REFERENCE_STYLE)
     for name, curve in curves.items():
         ax.plot(curve.index, curve.values, label=name, zorder=3, **{"linewidth": 1.6, **AXIS_STYLES[name]})
+    # Use the same rank range for every axis and display accuracy as a percentage.
     ax.set_xticks(np.arange(0, 1001, 200))
     ax.set_xlim(-10, 1010)
     ax.set_xlabel("Dissimilarity rank under the axis")
@@ -87,7 +89,7 @@ def set_rank_axis(ax, title):
 
 
 def format_overview_panels(axes, ylim):
-    """Shared y-limits, percent ticks, one y-label and legends for the panels of an overview figure."""
+    """Apply shared y-limits and percentage ticks, with a y-label on the first panel."""
     for i, ax in enumerate(axes):
         ax.set_ylim(*ylim)
         ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1.0, decimals=0))
@@ -119,12 +121,14 @@ def plot_visual_axes(head_curves, probe_curves, retrieval_curves, reference, yli
     with mpl.rc_context(STYLE):
         fig, axes = plt.subplots(1, 3, figsize=(3 * PANEL_SIZE[0], PANEL_SIZE[1]), layout="constrained")
 
+        # Show the individual heads together, using one legend entry for the whole group.
         ax = axes[0]
         ax.plot(reference.index, reference.values, label="Original consensus", zorder=3, **REFERENCE_STYLE)
         for i, curve in enumerate(head_curves.values()):
             ax.plot(curve.index, curve.values, color=HEAD_COLOR, linewidth=0.9, alpha=0.6, label=f"Single heads ({len(head_curves)})" if i == 0 else None, zorder=2)
         set_rank_axis(ax, "(a) Classifier heads")
         ax.legend(loc="lower left", frameon=False)
+        # Compare probes and retrieval against the same original consensus.
         draw_axis_curves(axes[1], probe_curves, reference, "(b) Self-supervised probes")
         draw_axis_curves(axes[2], retrieval_curves, reference, "(c) DINOv2 probe vs retrieval")
 
@@ -134,8 +138,10 @@ def plot_visual_axes(head_curves, probe_curves, retrieval_curves, reference, yli
 
 def draw_model_bundle(ax, curves, clip_model, marker=None):
     """Draw every model as a thin line, the mean over models in bold, and the CLIP model in orange."""
+    # Keep individual models faint so the overall pattern is easier to see.
     for i, model in enumerate(curves.columns.drop(clip_model)):
         ax.plot(curves.index, curves[model], color=OTHER_COLOR, linewidth=0.7, alpha=0.25, label="Single models" if i == 0 else None, zorder=2)
+    # The mean includes CLIP as well; draw CLIP separately to show its own behaviour.
     mean = curves.mean(axis=1)
     ax.plot(mean.index, mean.values, color=OTHER_COLOR, linewidth=2.2, marker=marker, markersize=3.5, label="Mean over models", zorder=4)
     ax.plot(curves.index, curves[clip_model], color=CLIP_COLOR, linewidth=1.6, marker=marker, markersize=3, label="CLIP ViT-B/16", zorder=3)
@@ -166,11 +172,13 @@ def plot_other_axes(clip_text_curves, wordnet_curves, reference, clip_model="CLI
     with mpl.rc_context(STYLE):
         fig, axes = plt.subplots(1, 2, figsize=(2 * PANEL_SIZE[0], PANEL_SIZE[1]), layout="constrained")
 
+        # CLIP text uses ranks, so we can also show the original consensus here.
         ax = axes[0]
         ax.plot(reference.index, reference.values, label="Original consensus", zorder=5, **REFERENCE_STYLE)
         draw_model_bundle(ax, clip_text_curves, clip_model)
         set_rank_axis(ax, "(a) CLIP text")
 
+        # WordNet uses discrete hop counts rather than ranks; mark each available count.
         ax = axes[1]
         draw_model_bundle(ax, wordnet_curves, clip_model, marker="o")
         ax.set_xlabel("WordNet hop count")
