@@ -135,7 +135,7 @@ The underlying composite-generation code is in `ooc1k/dataset_generation/composi
 
 ## Acknowledgements
 
-TBA
+This work was partly funded by the BMFTR neuroAI grant GROWUPAI, DFG project 5368 (Abstract REpresentations in Neural Architectures, ARENA), and DFG project 539642788, RO 6458/5-1 (Learning from the Environment Through the Eyes of Children, LEECHI). We gratefully acknowledge support from the Hessian Center for Artificial Intelligence and Goethe University (NHR Center NHR@SW) for providing the computing and data-processing resources needed for this work.
 
 ## Other resources
 
