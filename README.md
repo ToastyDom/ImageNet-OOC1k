@@ -17,8 +17,7 @@ We evaluate 35 models and examine their internal representations to understand h
 
 - [Main findings](#main-findings)
 - [Dataset](#dataset)
-- [Installation](#installation)
-- [Getting the data](#getting-the-data)
+- [Getting started](#getting-started)
 - [Running the notebooks](#running-the-notebooks)
 - [Acknowledgements](#acknowledgements)
 - [Other resources](#other-resources)
@@ -46,11 +45,15 @@ ImageNet-OOC1k is derived from [ImageNet](https://image-net.org) validation imag
 
 The dataset decouples object identity from background context. Composite specifications record the object, background, placement, scale, and other generation parameters.
 
-We distribute metadata and reconstruction files rather than complete ImageNet-derived images. To recreate the dataset, you need your own copies of ImageNet and the ImageNet-S annotations. The steps below reconstruct the source images; notebook 02 then generates the composites.
+We distribute metadata and reconstruction files rather than complete ImageNet-derived images. To recreate the dataset, you need the ImageNet validation images and ImageNet-S annotations. The steps below reconstruct the source images, after which the notebooks generate the composites and controls.
 
-## Installation
+## Getting started
 
-Clone the repository and create the environment.
+The generated dataset occupies approximately **100 GB**. Choose a location with enough space for the dataset, downloaded archives, and analysis outputs.
+
+### 1. Install the environment
+
+Clone the repository and create the Conda environment.
 
 ```bash
 git clone https://github.com/ToastyDom/ImageNet-OOC1k.git
@@ -61,55 +64,51 @@ conda activate ooc1k
 
 The environment includes Python 3.11, PyTorch 2.10, timm 1.0.26, and the repository's `ooc1k` package. Pretrained model weights are downloaded when the models are first loaded.
 
-## Getting the data
+### 2. Download the source files
 
-### 1. Download the reconstruction files
+You need three archives:
 
-Download our source files from **[LINK TBA]** and extract them into `ImageNet-OOC1k/source/` inside the repository.
+| File | Size | Download | Reference |
+|---|---|---|---|
+| `ImageNet-OOC1k_source.zip` — our metadata and background patches | 197 MB | **[LINK TBA]** | [Our paper](#citation) |
+| `ILSVRC2012_img_val.tar` — ImageNet validation images | 6.3 GB | [ImageNet downloads](https://image-net.org/download-images) | [Russakovsky et al., IJCV 2015](https://arxiv.org/abs/1409.0575) |
+| `ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip` — ImageNet-S annotations | 61 MB | [Download ZIP](https://github.com/LUSSeg/ImageNet-S/releases/download/ImageNet-S/ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip) | [Gao et al., TPAMI 2022](https://arxiv.org/abs/2106.03149) |
 
-This directory should contain:
+Use the **original ImageNet validation images**, rather than the face-blurred version, so that reconstruction checksums match. ImageNet access requires an account.
 
-- `metadata.csv`
-- `metadata_objects.csv`
-- `manifest.csv`
-- `versions.json`
-- `background_patches/`
+For ImageNet-S, you only need the annotation ZIP listed above. You do not need to install its toolbox or run its preparation scripts.
 
-The background patches contain the inpainted regions used to reconstruct our backgrounds from the original ImageNet images.
+### 3. Reconstruct the source images
 
-### 2. Download the ImageNet validation images
-
-Download `ILSVRC2012_img_val.tar` (approximately 6.3 GB) from [ImageNet](https://image-net.org/download-images).
-
-Use the **original validation images**, rather than the face-blurred version. The reconstruction script accepts either the tar archive or an extracted directory.
-
-### 3. Download the ImageNet-S masks
-
-Download the **ImageNet-S-919 validation segmentations** from [ImageNet-S](https://github.com/LUSSeg/ImageNet-S).
-
-You need the `ImageNetS919/validation-segmentation` directory, or a zip archive containing it.
-
-### 4. Reconstruct the source dataset
-
-From the repository root, run:
+From the repository root, extract our source archive and run the reconstruction script. The ImageNet and ImageNet-S archives can remain compressed.
 
 ```bash
+unzip ImageNet-OOC1k_source.zip -d ImageNet-OOC1k/source
+
 python prepare_source.py \
     --imagenet-val /path/to/ILSVRC2012_img_val.tar \
-    --imagenet-s /path/to/ImageNetS919/validation-segmentation
+    --imagenet-s /path/to/ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip
 ```
 
-Replace the paths with the locations of your downloaded files.
+Replace the paths with the locations of your downloaded archives.
 
-The script extracts the 1,137 original images and 12,321 object-library images, builds the object masks from the ImageNet-S annotations, and reconstructs the inpainted backgrounds. Checksums verify that the reconstructed files match the expected dataset.
+The script extracts the 1,137 original images and 12,321 object-library images, builds their masks, and reconstructs the inpainted backgrounds. It verifies the reconstructed files against our checksums to ensure that they match the expected source dataset.
 
-You can then generate the composites and control images with notebook 02.
+Already extracted directories are also supported.
 
-> Notebook 08 also requires ImageNet **training** images to fit the linear probes. These are only needed if you want to rerun that analysis.
+### 4. Generate the dataset
+
+Open the notebooks from the repository root using the `ooc1k` environment.
+
+First, run **notebook 01** to construct the visual-semantic axes. Then run **notebook 02** to generate the composites, control images, and mechanistic subset. The composite images occupy approximately 86 GB.
+
+Continue with the remaining notebooks to run inference and reproduce the analyses described below.
+
+> Notebook 08 additionally requires ImageNet **training** images to fit the linear probes. These are only needed if you want to rerun that analysis.
 
 ## Running the notebooks
 
-The notebooks follow the analysis from axis construction and dataset generation to model evaluation and diagnostic controls. Open them from the repository root and follow their instructions in order. Figures are saved to `outputs/figures/`.
+The notebooks cover the full workflow, from axis construction and dataset generation to model evaluation and diagnostic analyses. Each notebook explains its purpose and settings. Figures are saved to `outputs/figures/`.
 
 | Notebook | Purpose | Paper |
 |---|---|---|
@@ -147,7 +146,7 @@ Our dataset and analyses build on the following resources:
 - **[timm](https://github.com/huggingface/pytorch-image-models)** provides pretrained vision models and inference utilities.
 - **[OpenAI CLIP](https://github.com/openai/CLIP)** provides the image–text model used in our evaluations.
 
-ImageNet-derived components remain subject to the source datasets' access and redistribution terms. If you use ImageNet or ImageNet-S, please also cite their original publications using the citation information on their project pages.
+ImageNet-derived components remain subject to the source datasets' access and redistribution terms. Please also cite ImageNet and ImageNet-S when using their data, following the references linked in the download table.
 
 The code license is provided in [LICENSE](LICENSE).
 
