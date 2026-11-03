@@ -14,3 +14,4 @@ __pycache__/
 
 # ImageNet-OOC1k images (source data and generated composites)
 ImageNet-OOC1k/
+/data/semantic_axes

@@ -30,7 +30,7 @@ def load_data(source_dir, similarity_matrix_path, class_index_path):
 
     # Read the background and object tables.
     root = Path(source_dir)
-    bg_metadata = pd.read_csv(root / "metadata.csv")
+    bg_metadata = pd.read_csv(root / "metadata_backgrounds.csv")
     obj_metadata = pd.read_csv(root / "metadata_objects.csv")
 
     # Group object filenames by class, preserving their metadata order.
