@@ -61,11 +61,7 @@ def load_ground_truth_library(metadata_path):
 
 
 def load_ground_truth_composites(metadata_path, class_index_path):
-    """Ground truth of the composites: the class of the placed object.
-
-    A few composite names occur twice in the metadata (object images listed under two
-    classes); they keep the class of their last row.
-    """
+    """Ground truth of the composites: the class of the placed object."""
     hash_to_idx = {wnid: idx for idx, (wnid, _) in load_class_index(class_index_path).items()}
     metadata = pd.read_csv(metadata_path)
     return {
@@ -242,14 +238,25 @@ def run_inference(
     num_workers=4,
     skip_existing=True,
 ):
-    """Run every model on every condition and save one CSV per pair.
+    """
+    Run every model on every condition and save one CSV per pair.
 
-    Args:
-        models     : dict, CSV model name -> timm model name (or `CLIP_MODEL`)
-        conditions : dict, condition name -> (image folder or composites.h5, ground truth)
+    The CSVs are named `{model}_{condition}_{timestamp}.csv`.
 
-    The CSVs are named `{model}_{condition}_{timestamp}.csv`. With `skip_existing`, pairs
-    that already have a CSV in `output_dir` are not run again.
+    Parameters
+    ----------
+    models : dict
+        CSV model name -> timm model name (or `CLIP_MODEL`).
+    conditions : dict
+        Condition name -> (image folder or composites.h5, ground truth).
+    class_index_path : str or pathlib.Path
+        JSON mapping ImageNet indices to class hashes and labels.
+    output_dir : str or pathlib.Path
+        Folder the prediction CSVs are written to.
+    batch_size, num_workers : int
+        DataLoader settings.
+    skip_existing : bool
+        Do not run pairs that already have a CSV in `output_dir`.
     """
     # Set up the output directory, class labels, and device.
     output_dir = Path(output_dir)

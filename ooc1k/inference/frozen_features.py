@@ -19,7 +19,7 @@ def list_imagenet_train(imagenet_train):
     """List the ImageNet training images, either from a train/<wnid>/ folder or from our H5 file with its mapper."""
     imagenet_train = Path(imagenet_train)
 
-    # Our server keeps ImageNet in one H5 file, with a parquet file that lists the images in it.
+    # We keep our copy of ImageNet in one H5 file, with a parquet file that lists the images in it.
     if imagenet_train.suffix == ".h5":
         mapper = pd.read_parquet(imagenet_train.with_name("train_mapper.parquet"), columns=["h5_index", "filename", "wn_name"])
         return pd.DataFrame({"filename": mapper["filename"], "wnid": mapper["wn_name"], "source": mapper["h5_index"]})
