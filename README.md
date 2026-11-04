@@ -1,6 +1,8 @@
 # How Far Is Too Far?
 ## Object Recognition Declines Monotonically with Semantic Distance
 
+**[Paper](https://neurips.cc/virtual/2026/loc/sydney/poster/148472)** · **[Source files](https://drive.google.com/file/d/1pjOMNrFXZB62B7Kou3RMPaRDSFKznwop/view?usp=sharing)** · **[Citation](#citation)**
+
 Code and dataset resources for our **NeurIPS 2026 Spotlight paper** by [Domenic Bersch](https://toastydom.github.io/), Hai Van Tran, and [Gemma Roig, Goethe University Frankfurt](https://www.cvai.cs.uni-frankfurt.de/).
 
 Vision models recognise objects partly through their surroundings. But how does recognition change as an object and its background become less related?
@@ -73,7 +75,7 @@ You need three archives:
 
 | File | Size | Download | Reference |
 |---|---|---|---|
-| `ImageNet-OOC1k_source.zip` — our metadata, background patches and the semantic axes of the paper | 249 MB | [Google Drive](https://drive.google.com/file/d/1pjOMNrFXZB62B7Kou3RMPaRDSFKznwop/view?usp=sharing) | [Our paper](#citation) |
+| `ImageNet-OOC1k_source.zip` — our metadata, background patches and the semantic axes of the paper | 249 MB | [Google Drive](https://drive.google.com/file/d/1pjOMNrFXZB62B7Kou3RMPaRDSFKznwop/view?usp=sharing) | [Bersch et al., NeurIPS 2026](https://neurips.cc/virtual/2026/loc/sydney/poster/148472) |
 | `ILSVRC2012_img_val.tar` — ImageNet validation images | 6.3 GB | [ImageNet downloads](https://image-net.org/download-images) | [Russakovsky et al., IJCV 2015](https://arxiv.org/abs/1409.0575) |
 | `ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip` — ImageNet-S annotations | 61 MB | [Download ZIP](https://github.com/LUSSeg/ImageNet-S/releases/download/ImageNet-S/ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip) | [Gao et al., TPAMI 2022](https://arxiv.org/abs/2106.03149) · [GitHub](https://github.com/LUSSeg/ImageNet-S) |
 
@@ -158,6 +160,8 @@ ImageNet-derived components remain subject to the source datasets' access and re
 The code license is provided in [LICENSE](LICENSE).
 
 ## Citation
+
+Paper: [NeurIPS 2026](https://neurips.cc/virtual/2026/loc/sydney/poster/148472)
 
 If you use ImageNet-OOC1k or this code, please cite:
 
