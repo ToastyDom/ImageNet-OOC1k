@@ -73,7 +73,7 @@ You need three archives:
 
 | File | Size | Download | Reference |
 |---|---|---|---|
-| `ImageNet-OOC1k_source.zip` — our metadata and background patches | 197 MB | **[LINK TBA]** | [Our paper](#citation) |
+| `ImageNet-OOC1k_source.zip` — our metadata, background patches and the semantic axes of the paper | 249 MB | [Google Drive](https://drive.google.com/file/d/1pjOMNrFXZB62B7Kou3RMPaRDSFKznwop/view?usp=sharing) | [Our paper](#citation) |
 | `ILSVRC2012_img_val.tar` — ImageNet validation images | 6.3 GB | [ImageNet downloads](https://image-net.org/download-images) | [Russakovsky et al., IJCV 2015](https://arxiv.org/abs/1409.0575) |
 | `ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip` — ImageNet-S annotations | 61 MB | [Download ZIP](https://github.com/LUSSeg/ImageNet-S/releases/download/ImageNet-S/ImageNetS919-5f7f58ae1003d21da9409a8576bf7680.zip) | [Gao et al., TPAMI 2022](https://arxiv.org/abs/2106.03149) · [GitHub](https://github.com/LUSSeg/ImageNet-S) |
 
@@ -81,10 +81,10 @@ For ImageNet-S, you only need the annotation ZIP listed above. You do not need t
 
 ### 3. Reconstruct the source images
 
-From the repository root, extract our source archive and run the reconstruction script. The ImageNet and ImageNet-S archives can remain compressed.
+From the repository root, extract our source archive and run the reconstruction script. The archive unpacks into `ImageNet-OOC1k/source/`; the notebooks later add the generated images next to it in `ImageNet-OOC1k/generated/`. The ImageNet and ImageNet-S archives can remain compressed.
 
 ```bash
-unzip ImageNet-OOC1k_source.zip -d ImageNet-OOC1k/source
+unzip /path/to/ImageNet-OOC1k_source.zip
 
 python prepare_source.py \
     --imagenet-val /path/to/ILSVRC2012_img_val.tar \
@@ -102,6 +102,12 @@ Already extracted directories are also supported.
 Open the notebooks from the repository root using the `ooc1k` environment.
 
 First, run **notebook 01** to construct the visual-semantic axes. Then run **notebook 02** to generate the composites, control images, and mechanistic subset. The composite images occupy approximately 86 GB.
+
+> Rebuilt axes can differ from ours by floating-point rounding (around 0.000001), which occasionally swaps two nearly equidistant classes. To reproduce our composites exactly, set `USE_PAPER_AXIS = True` in notebook 02. It then uses the consensus matrix of the paper from `ImageNet-OOC1k/source/semantic_axes_paper/`. If you want all notebooks to use the matrices of the paper, copy them over the ones from notebook 01:
+>
+> ```bash
+> cp -r ImageNet-OOC1k/source/semantic_axes_paper/. data/semantic_axes/
+> ```
 
 Continue with the remaining notebooks to run inference and reproduce the analyses described below.
 
