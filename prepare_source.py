@@ -1,9 +1,8 @@
 """Rebuild the ImageNet-OOC1k source folder from ImageNet and ImageNet-S.
 
-The source folder ships with our metadata, the background patches and a manifest. This script adds the
-originals, the object library and the masks from your ImageNet and ImageNet-S copies, and turns the patches into
-the inpainted backgrounds. Every file is checked against the SHA-256 in the manifest (masks by their pixels, since
-PNG compression differs between zlib builds).
+We ship the metadata, background patches and a manifest. The script uses your ImageNet validation images
+and ImageNet-S annotations to fill in the source folder. Each patch rebuilds an inpainted background from
+its original ImageNet image. The manifest lets us check each file as we go.
 
 Run it from the repository root:
 
@@ -35,7 +34,7 @@ def get_sha256(data):
 def index_files(path, suffix):
     """Map file names to loaders for a folder (searched recursively), a .tar or a .zip file."""
 
-    # Collect (name, loader) pairs from the given container.
+    # Index by filename so inputs can be nested in class folders. Read the bytes only when needed.
     path = Path(path)
     if path.is_dir():
         entries = [(p.name, p.read_bytes) for p in path.rglob(f"*{suffix}")]
@@ -50,7 +49,7 @@ def index_files(path, suffix):
     else:
         raise ValueError(f"Expected a folder, .tar or .zip file, got {path}")
 
-    # Names that occur twice are marked as ambiguous (None).
+    # Mark duplicate names as ambiguous so we never silently pick one.
     index = {}
     for name, loader in entries:
         index[name] = None if name in index else loader
@@ -67,7 +66,10 @@ def load_source(index, name, where):
 
 
 def make_mask(segmentation):
-    """Turn ImageNet-S annotation bytes into our binary mask PNG (255 where the class id R + 256 * G is not 0)."""
+    """Turn an ImageNet-S annotation into a binary PNG mask."""
+
+    # ImageNet-S stores the class ID across the red and green channels.
+    # Zero is background, so keep all pixels with a nonzero ID.
     seg = np.asarray(Image.open(io.BytesIO(segmentation)).convert("RGB")).astype(np.int32)
     mask = np.where(seg[..., 0] + 256 * seg[..., 1] != 0, 255, 0).astype(np.uint8)
     buffer = io.BytesIO()
@@ -77,6 +79,7 @@ def make_mask(segmentation):
 
 def apply_patch(original, patch):
     """Rebuild a background from the original ImageNet file and its zstd patch."""
+    # The patch uses the original JPEG bytes as its zstd dictionary.
     reference = zstandard.ZstdCompressionDict(original, dict_type=zstandard.DICT_TYPE_RAWCONTENT)
     return zstandard.ZstdDecompressor(dict_data=reference).decompress(patch)
 
@@ -88,6 +91,7 @@ def get_pixel_sha256(data):
 
 def matches_reference(data, row):
     """Check rebuilt bytes against the manifest. Masks are compared by pixels, the rest byte for byte."""
+    # PNG compression can differ across machines even when the mask pixels match.
     if row.kind == "mask":
         return get_pixel_sha256(data) == row.pixel_sha256
     return get_sha256(data) == row.target_sha256
@@ -111,10 +115,10 @@ def prepare_source(imagenet_val, imagenet_s, source_dir=SOURCE_DIR):
     Returns
     -------
     manifest : pd.DataFrame
-        One row per rebuilt file.
+        One row per expected file, including files that were already valid.
     """
 
-    # Read the manifest and index the inputs.
+    # The manifest lists what we need to build and the hashes we expect.
     source_dir = Path(source_dir)
     manifest = pd.read_csv(source_dir / "manifest.csv")
     print("Indexing ImageNet and ImageNet-S (this can take a minute)")
@@ -123,12 +127,13 @@ def prepare_source(imagenet_val, imagenet_s, source_dir=SOURCE_DIR):
 
     n_skipped = 0
     for row in tqdm(manifest.itertuples(), total=len(manifest), desc="Rebuilding source"):
+        # Keep files that already pass the manifest check so an interrupted run can resume.
         target_path = source_dir / row.path
         if target_path.exists() and matches_reference(target_path.read_bytes(), row):
             n_skipped += 1
             continue
 
-        # Load and check the input file.
+        # Check that we have the exact original image or annotation before using it.
         where = imagenet_s if row.kind == "mask" else imagenet_val
         source = load_source(segmentations if row.kind == "mask" else imagenet, row.source_name, where)
         if get_sha256(source) != row.source_sha256:
@@ -136,7 +141,7 @@ def prepare_source(imagenet_val, imagenet_s, source_dir=SOURCE_DIR):
                              "Use the original ILSVRC2012 validation images (not the face-blurred version) "
                              "and the official ImageNet-S annotations.")
 
-        # Rebuild the file: masks from the annotation, backgrounds from the patch, the rest is copied.
+        # Make masks from annotations and backgrounds from patches. Copy the other images as they are.
         if row.kind == "mask":
             data = make_mask(source)
         elif row.kind == "background":
@@ -144,7 +149,7 @@ def prepare_source(imagenet_val, imagenet_s, source_dir=SOURCE_DIR):
         else:
             data = source
 
-        # Check the result before writing it.
+        # Verify the rebuilt file before writing it to the source folder.
         if not matches_reference(data, row):
             raise ValueError(f"Rebuilt {row.path} does not match the reference (SHA-256 differs).")
         target_path.parent.mkdir(parents=True, exist_ok=True)
